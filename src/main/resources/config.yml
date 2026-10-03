@@ -84,39 +84,8 @@ boss:
   # Boss 存活超时（分钟；0=不超时）。超时强制清除，避免 Boss 永久占位
   despawn-minutes: 30
 
-  # ---- 能力值（capability）：五项分项归一后相乘得 modifier ∈ [0,1] ----
-  # 概率触发型 Boss 的有效概率 = trigger-param(%) × modifier（向下拉，不放大）。
-  # 无全局硬上限：各 Boss 的 trigger-param 即其自己的天花板（水做之影 20% → 20%×modifier）。
-  # 各分项曲线方向：攻击=钟形（读背包而非手持）、防御=单调递增、
-  # 击败=钟形、账号年龄=钟形、生存=单调递增带饱和。
-  capability:
-    enabled: true          # 总开关；false = 全部退回纯 trigger-param
-    # 攻击分（钟形）
-    attack-peak: 8.0       # 钟形峰值（背包最强武器 ADD_NUMBER 攻击力；8=铁/钻石近峰，空手0压得更低）
-    attack-sigma: 4.0      # 钟形宽度 σ（越小越尖；4 让铁套玩家远离峰值时仍留分）
-    # 防御分（单调递增，带底噪）
-    defense-max: 26.0      # 归一满值基准：base + (1-base)×sqrt((盔甲 + 韧性权重×韧性) / 26)
-    defense-toughness-weight: 0.5   # 韧性折算权重
-    defense-base: 0.4      # 防御分底噪：裸装（无盔甲）拿到的最低分；0=纯 sqrt（会把萌新彻底排除）
-    # 击败分（钟形）：战绩封顶值为 log1p 归一基准，权重为四项占比
-    defeat-peak: 0.3       # 钟形峰值（0-1 归一战绩分；0.3=铁套中战绩在峰，0战绩萌新压得更低）
-    defeat-sigma: 0.25
-    kills-cap: 200         # 击杀封顶值（log1p(200) ≈ 归一分母）
-    dungeons-cap: 20       # 地城通关封顶值
-    bosses-cap: 10         # Boss 击杀封顶值
-    arena-cap: 5           # 擂台夺冠封顶值
-    weight-kills: 0.4      # 战绩权重：击杀
-    weight-dungeons: 0.3   # 战绩权重：地城
-    weight-bosses: 0.2     # 战绩权重：Boss
-    weight-arena: 0.1      # 战绩权重：擂台（四项权重之和应 ≈ 1.0）
-    # 账号年龄分（钟形）
-    age-peak: 0.1          # 钟形峰值（0-1 归一，0.1=玩了约 6 天的玩家触发最多；0.3=18 天）
-    age-sigma: 0.2
-    age-max-days: 60.0     # 账号年龄归一上限（天）
-    # 生存分（单调递增带饱和）
-    survival-cap: 1800.0   # 封顶秒数（1800 = 30 分钟；30 分钟内没死就爬满，S 摆动范围小 → 干扰低）
-    # 折算
-    reference: 1.0         # 参考倍率：modifier/reference 折算到 [0,1]，越大越宽松
+  # 能力值（攻击/防御钟形曲线）参数逐 Boss 存于 bosses.yml 的 capability 段，
+  # 此处不设全局曲线；每只概率触发型 Boss 各自标定 attack-peak / defense-peak 等。
 
 # ---------- 集成 ----------
 integration:

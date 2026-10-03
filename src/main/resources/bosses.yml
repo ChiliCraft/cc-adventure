@@ -18,17 +18,19 @@
 # mythic-id 非空且 MM 在场时改由 MM 生成（技能交 MM 配置接管）；
 # MM 缺失或生成失败自动降级原版实体路径。
 #
-# 能力值（capability）：概率触发型 Boss（RAIN_OCEAN / THUNDER / RANDOM）
-#   的有效概率 = trigger-param(%) × modifier（modifier ∈ [0,1]，见 config.yml）。
-#   capability: true|false   —— 逐 Boss 开关；缺省继承全局 boss.capability.enabled
-#   capability-cap: { ... }  —— 逐 Boss 覆盖曲线参数（键同 config.yml boss.capability，
-#                               白名单校验，非法键告警跳过；仅覆盖曲线形状，
-#                               不覆盖开关与全局折算 reference/weights）
-#   示例（只让"玩得久、装备好"的老玩家遇到本 Boss）：
-#     capability-cap:
-#       attack-peak: 12
-#       defeat-peak: 0.7
-#       age-peak: 0.6
+# 能力值（capability）：概率触发型 Boss（RAIN_OCEAN / THUNDER / RANDOM）的
+#   有效概率 = trigger-param(%) × modifier，modifier = 攻击分 × 防御分，
+#   两项各走一条钟形曲线，参数逐 Boss 独立声明在该 Boss 节点的 capability 段。
+#   capability 段字段：
+#     curve           曲线类型，当前仅 bell（钟形 exp(-((x-peak)²)/(2σ²))）
+#     enabled         true=套用能力值；false=直接用 trigger-param（不乘 modifier）
+#     attack-peak     攻击峰值：背包最强武器攻击力，原版铁剑=6
+#     attack-sigma    攻击钟形宽度 σ（越大越平缓）
+#     defense-peak    防御峰值：玩家盔甲值，原版铁套=15
+#     defense-sigma   防御钟形宽度 σ
+#     reference       折算分母：modifier/reference 截断到 [0,1]，默认 1.0
+#   缺省整个 capability 段时用标定默认（铁剑6/铁套15 落峰，σ=3/σ=5）：
+#     攻击：木4 铁6 钻7 下界合金8 / 防御：铁12 钻20（附魔保护每件+3）
 # ============================================================
 
 bosses:
@@ -108,9 +110,17 @@ bosses:
     health: 350
     attack: 6
     trigger: RANDOM
-    trigger-param: 0.5        # 每次巡检 0.5%（capability 乘算后 ≤ 0.5%；铁套3h≈1次/60min）
+    trigger-param: 0.5        # 每次巡检基础概率 %（再乘能力值 modifier）
     first-kill-soul: 200
     mythic-id: ""
+    capability:
+      curve: bell             # 攻击/防御各走钟形曲线
+      enabled: true           # 套用能力值（false = 直接用 trigger-param）
+      attack-peak: 6.0        # 铁剑 6 落峰：期望刷出的目标区间
+      attack-sigma: 3.0       # 木4/钻7 仍留分，空手0快速衰减
+      defense-peak: 15.0      # 铁套 15 落峰（含铁甲12+少量附魔/盾）
+      defense-sigma: 5.0      # 铻20/钻20 在右侧留分，皮套5/裸装0在左侧衰减
+      reference: 1.0          # modifier 分母；>1 放宽、<1 收紧
     skills:
       flock:
         type: SUMMON

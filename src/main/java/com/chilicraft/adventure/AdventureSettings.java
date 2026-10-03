@@ -1,6 +1,5 @@
 package com.chilicraft.adventure;
 
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
@@ -52,31 +51,9 @@ final class AdventureSettings {
     boolean integrationMythicMobs = false;  // MM 在场时托管 Boss 技能
     int bossDespawnMinutes = 30;            // Boss 存活超时（0=不超时）
 
-    // ---------- 世界 Boss · 能力值（capability） ----------
-    // 五项分项各归一到 [0,1] 后相乘得 modifier ∈ [0,1]，
-    // 概率触发型 Boss 的有效概率 = trigger-param(%) × modifier（不设全局硬上限，
-    // 各 Boss 的 trigger-param 即其自己的天花板）。
-    boolean capEnabled = true;              // 总开关；false = 全部退回纯 trigger-param
-    double capAttackPeak = 8.0;             // 攻击钟形峰值（背包最强武器攻击力）
-    double capAttackSigma = 3.0;            // 攻击钟形宽度 σ
-    double capDefenseMax = 26.0;            // 防御归一满值基准（盔甲+权重×韧性）
-    double capDefenseToughnessWeight = 0.5; // 韧性折算权重（加入防御分的系数）
-    double capDefenseBase = 0.0;            // 防御分底噪（裸装拿到的最低分，0=纯 sqrt）
-    double capDefeatPeak = 0.4;             // 击败钟形峰值（0-1 归一战绩分）
-    double capDefeatSigma = 0.25;           // 击败钟形宽度 σ
-    int capKillsCap = 200;                  // 击败分：击杀封顶值（log1p 归一基准）
-    int capDungeonsCap = 20;                // 击败分：地城封顶值
-    int capBossesCap = 10;                  // 击败分：Boss 击杀封顶值
-    int capArenaCap = 5;                    // 击败分：擂台封顶值
-    double capWeightKills = 0.4;            // 击败分权重：击杀
-    double capWeightDungeons = 0.3;         // 击败分权重：地城
-    double capWeightBosses = 0.2;           // 击败分权重：Boss
-    double capWeightArena = 0.1;            // 击败分权重：擂台
-    double capAgePeak = 0.3;                // 账号年龄钟形峰值（0-1 归一）
-    double capAgeSigma = 0.2;               // 账号年龄钟形宽度 σ
-    double capAgeMaxDays = 60.0;            // 账号年龄归一上限（天）
-    double capSurvivalCap = 21600.0;        // 生存分封顶秒数（6 小时）
-    double capReference = 1.0;              // 参考倍率：modifier/参考 折算到 [0,1]
+    // 能力值曲线参数（攻击/防御钟形峰值、宽度、折算倍率）不在此处：
+    // 它们逐 Boss 存于 bosses.yml 的 capability 段，由 BossContent 解析进
+    // BossDefinition.Capability，BossProbability 按 Boss 标签直读。
 
     // ---------- 消息 ----------
     Map<String, String> messages = new HashMap<>();
@@ -130,30 +107,6 @@ final class AdventureSettings {
         integrationMythicMobs = plugin.getConfig().getBoolean("integration.mythicmobs", false);
         bossDespawnMinutes = clampInt("boss.despawn-minutes", 30, 0, 1440);
 
-        var cap = plugin.getConfig().getConfigurationSection("boss.capability");
-        capEnabled = cap == null || cap.getBoolean("enabled", true);
-        capAttackPeak = cap == null ? 8.0 : clampDouble(cap, "attack-peak", 8.0, 0.0, 100.0);
-        capAttackSigma = cap == null ? 3.0 : clampDouble(cap, "attack-sigma", 3.0, 0.1, 100.0);
-        capDefenseMax = cap == null ? 26.0 : clampDouble(cap, "defense-max", 26.0, 1.0, 100.0);
-        capDefenseToughnessWeight = cap == null ? 0.5
-                : clampDouble(cap, "defense-toughness-weight", 0.5, 0.0, 10.0);
-        capDefenseBase = cap == null ? 0.0 : clampDouble(cap, "defense-base", 0.0, 0.0, 1.0);
-        capDefeatPeak = cap == null ? 0.4 : clampDouble(cap, "defeat-peak", 0.4, 0.0, 1.0);
-        capDefeatSigma = cap == null ? 0.25 : clampDouble(cap, "defeat-sigma", 0.25, 0.01, 1.0);
-        capKillsCap = cap == null ? 200 : clampInt(cap, "kills-cap", 200, 1, 100_000);
-        capDungeonsCap = cap == null ? 20 : clampInt(cap, "dungeons-cap", 20, 1, 10_000);
-        capBossesCap = cap == null ? 10 : clampInt(cap, "bosses-cap", 10, 1, 10_000);
-        capArenaCap = cap == null ? 5 : clampInt(cap, "arena-cap", 5, 1, 10_000);
-        capWeightKills = cap == null ? 0.4 : clampDouble(cap, "weight-kills", 0.4, 0.0, 1.0);
-        capWeightDungeons = cap == null ? 0.3 : clampDouble(cap, "weight-dungeons", 0.3, 0.0, 1.0);
-        capWeightBosses = cap == null ? 0.2 : clampDouble(cap, "weight-bosses", 0.2, 0.0, 1.0);
-        capWeightArena = cap == null ? 0.1 : clampDouble(cap, "weight-arena", 0.1, 0.0, 1.0);
-        capAgePeak = cap == null ? 0.3 : clampDouble(cap, "age-peak", 0.3, 0.0, 1.0);
-        capAgeSigma = cap == null ? 0.2 : clampDouble(cap, "age-sigma", 0.2, 0.01, 1.0);
-        capAgeMaxDays = cap == null ? 60.0 : clampDouble(cap, "age-max-days", 60.0, 1.0, 3650.0);
-        capSurvivalCap = cap == null ? 21600.0 : clampDouble(cap, "survival-cap", 21600.0, 60.0, 604800.0);
-        capReference = cap == null ? 1.0 : clampDouble(cap, "reference", 1.0, 0.0001, 10.0);
-
         messages.clear();
         var msg = plugin.getConfig().getConfigurationSection("messages");
         if (msg != null) {
@@ -191,24 +144,6 @@ final class AdventureSettings {
         int v = plugin.getConfig().getInt(path, def);
         if (v < min || v > max) {
             log.warning(() -> "配置 " + path + "=" + v + " 非法，回退默认 " + def);
-            return def;
-        }
-        return v;
-    }
-
-    private double clampDouble(ConfigurationSection section, String key, double def, double min, double max) {
-        double v = section.getDouble(key, def);
-        if (Double.isNaN(v) || v < min || v > max) {
-            log.warning(() -> "配置 boss.capability." + key + "=" + v + " 非法，回退默认 " + def);
-            return def;
-        }
-        return v;
-    }
-
-    private int clampInt(ConfigurationSection section, String key, int def, int min, int max) {
-        int v = section.getInt(key, def);
-        if (v < min || v > max) {
-            log.warning(() -> "配置 boss.capability." + key + "=" + v + " 非法，回退默认 " + def);
             return def;
         }
         return v;

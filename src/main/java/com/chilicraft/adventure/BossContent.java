@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.logging.Logger;
 
 /**
@@ -68,10 +67,8 @@ final class BossContent {
         // 概率触发型读小数（如 0.1 = 0.1%）；阈值型忽略此值
         double triggerPercent = Math.max(0.0, s.getDouble("trigger-param", 50.0));
         int firstKillSoul = Math.max(0, s.getInt("first-kill-soul", 100));
-        // capability 键：缺省 null（继承全局），显式 true/false 以本 Boss 为准
-        Boolean capability = s.contains("capability") ? s.getBoolean("capability") : null;
-        // 能力值曲线参数逐 Boss 覆盖：capability-cap 下的键（attack-peak 等）覆盖全局同名键
-        Map<String, Double> capabilityParams = parseCapabilityParams(s.getConfigurationSection("capability-cap"));
+        // 能力值曲线参数：逐 Boss 独立，缺省用 Capability.DEFAULT（铁套铁剑标定）
+        BossDefinition.Capability capability = parseCapability(s.getConfigurationSection("capability"));
 
         List<BossDefinition.Skill> skills = new ArrayList<>();
         ConfigurationSection sk = s.getConfigurationSection("skills");
@@ -103,39 +100,41 @@ final class BossContent {
                 health, attack, trigger, param, triggerPercent, firstKillSoul,
                 s.getString("mythic-id", ""),
                 capability,
-                capabilityParams,
                 List.copyOf(skills), true);
     }
 
     /**
-     * 解析逐 Boss 的能力值曲线参数覆盖段；只收白名单键（防误配未知键静默生效），
-     * 非法数值告警跳过。键与全局 config.yml boss.capability 同名。
+     * 解析单个 Boss 的 {@code capability} 段为强类型曲线参数。
+     * 缺段或缺单键均回退 {@link BossDefinition.Capability#DEFAULT} 的对应值；
+     * 非法数值（NaN/负）告警后回退默认，保证误配不致整只 Boss 概率异常。
      */
-    private Map<String, Double> parseCapabilityParams(ConfigurationSection s) {
+    private BossDefinition.Capability parseCapability(ConfigurationSection s) {
         if (s == null) {
-            return Map.of();
+            return BossDefinition.Capability.DEFAULT;
         }
-        Set<String> allowed = Set.of(
-                "attack-peak", "attack-sigma",
-                "defense-max", "defense-toughness-weight", "defense-base",
-                "defeat-peak", "defeat-sigma",
-                "kills-cap", "dungeons-cap", "bosses-cap", "arena-cap",
-                "weight-kills", "weight-dungeons", "weight-bosses", "weight-arena",
-                "age-peak", "age-sigma", "age-max-days",
-                "survival-cap", "reference");
-        Map<String, Double> result = new LinkedHashMap<>();
-        for (String key : s.getKeys(false)) {
-            if (!allowed.contains(key)) {
-                log.warning(() -> "Boss capability-cap 键非法（不在白名单）：" + key + "，忽略");
-                continue;
-            }
-            double v = s.getDouble(key, Double.NaN);
-            if (Double.isNaN(v) || Double.isInfinite(v) || v < 0) {
-                log.warning(() -> "Boss capability-cap." + key + "=" + v + " 非法，忽略");
-                continue;
-            }
-            result.put(key, v);
+        var def = BossDefinition.Capability.DEFAULT;
+        String raw = s.getString("curve", def.curve()).trim().toLowerCase(Locale.ROOT);
+        if (!"bell".equals(raw)) {
+            log.warning(() -> "Boss capability.curve 非法（当前仅支持 bell）：" + raw + "，回退 bell");
         }
-        return result;
+        String curve = "bell";
+        return new BossDefinition.Capability(
+                curve,
+                s.getBoolean("enabled", def.enabled()),
+                num(s, "attack-peak", def.attackPeak()),
+                num(s, "attack-sigma", def.attackSigma()),
+                num(s, "defense-peak", def.defensePeak()),
+                num(s, "defense-sigma", def.defenseSigma()),
+                num(s, "reference", def.reference()));
+    }
+
+    /** 读取非负数值键；NaN / 负数 / 无穷回退默认并告警 */
+    private double num(ConfigurationSection s, String key, double fallback) {
+        double v = s.getDouble(key, fallback);
+        if (Double.isNaN(v) || Double.isInfinite(v) || v < 0.0) {
+            log.warning(() -> "Boss capability." + key + "=" + v + " 非法，回退 " + fallback);
+            return fallback;
+        }
+        return v;
     }
 }

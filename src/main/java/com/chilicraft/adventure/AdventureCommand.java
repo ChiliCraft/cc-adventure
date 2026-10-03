@@ -150,37 +150,34 @@ final class AdventureCommand implements CommandExecutor, TabCompleter, ModuleCom
                 + "；Boss 定义：" + bosses.bossCount());
     }
 
-    /** 能力值 debug：打印五项分项、乘积倍率与每个概率型 Boss 的有效概率 */
+    /**
+     * 概率调试：对每个概率触发型 Boss 打印分项（攻击分/防御分及原值）、
+     * 乘积 modifier 与有效概率。分项与巡检判定同源（BossProbability），
+     * 所见即所掷。
+     */
     private void bossDebug(Player player) {
-        CapabilityService cap = bosses.capability();
-        CapabilityService.Snapshot s = cap.evaluate(player);
-        player.sendMessage("=== 世界 Boss 能力值（capability " + (bosses.capabilityEnabled() ? "开" : "关") + "）===");
-        player.sendMessage(String.format(Locale.ROOT,
-                "攻击 A=%.3f（背包最强 %.2f）| 防御 D=%.3f（%.2f）| 击败 B=%.3f | 年龄 R=%.3f（%d天）| 生存 S=%.3f（%s）",
-                s.attack(), s.rawAttack(), s.defense(), s.rawDefense(),
-                s.defeat(), s.age(), s.accountAgeDays(),
-                s.survival(), s.secondsSinceDeath() < 0 ? "无死亡记录" : s.secondsSinceDeath() + "秒"));
-        player.sendMessage(String.format(Locale.ROOT,
-                "Modifier = A×D×B×R×S = %.4f（参考 %.2f → 折算 %.3f）",
-                s.modifier(), settings.capReference,
-                Math.min(1.0, s.modifier() / settings.capReference)));
+        player.sendMessage("=== 世界 Boss 触发概率 ===");
         for (BossDefinition def : bosses.definitions().values()) {
             if (def.trigger != BossDefinition.TriggerType.RAIN_OCEAN
                     && def.trigger != BossDefinition.TriggerType.THUNDER
                     && def.trigger != BossDefinition.TriggerType.RANDOM) {
                 continue;
             }
-            boolean useCap = def.capabilityEnabled(settings.capEnabled);
-            double effective = useCap
-                    ? cap.effectivePercent(def.triggerPercent, s.modifier(), def)
-                    : def.triggerPercent;
-            player.sendMessage(String.format(Locale.ROOT, "  %-16s 基础 %.3f%% → 有效 %.4f%%%s",
-                    def.id, def.triggerPercent, effective,
-                    useCap ? "" : "（该 Boss 关闭能力值）"));
+            BossProbability.Result r = BossProbability.evaluate(def, player);
+            player.sendMessage(String.format(Locale.ROOT,
+                    "  %-16s 攻击 %.3f（原值 %.1f，峰 %.1f/σ %.1f）| 防御 %.3f（原值 %.1f，峰 %.1f/σ %.1f）",
+                    def.id,
+                    r.attackScore(), r.rawAttack(),
+                    def.capability.attackPeak(), def.capability.attackSigma(),
+                    r.defenseScore(), r.rawDefense(),
+                    def.capability.defensePeak(), def.capability.defenseSigma()));
+            player.sendMessage(String.format(Locale.ROOT,
+                    "    modifier=%.4f → 基础 %.3f%% → 有效 %.4f%%（%s，折算 reference %.2f）",
+                    r.modifier(), def.triggerPercent, r.effectivePercent(),
+                    def.capabilityEnabled() ? "开" : "关", def.capability.reference()));
         }
         player.sendMessage("巡检间隔 " + settings.bossCheckSeconds + " 秒（"
-                + settings.bossCheckSeconds * 20L + " ticks）；有效概率 = trigger-param × modifier，无全局硬上限");
-        player.sendMessage("注：modifier 用全局曲线算；各 Boss 若配了 capability-cap 则以其覆盖为准。");
+                + settings.bossCheckSeconds * 20L + " ticks）；60 分钟期望 ≈ 有效概率% × 20 × 60");
     }
 
     private void usage(CommandSender sender) {
