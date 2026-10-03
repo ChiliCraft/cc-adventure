@@ -84,6 +84,15 @@ final class BossService {
         if (playerId == null) {
             return;
         }
+        // 玩家死亡：清空其名下 Boss 的召唤物（恼鬼等），Boss 本体保留不清除。
+        // 反过来：如果玩家仍在场，召唤物应保留（玩家死后按 MINION_OWNER 归属定位清理）。
+        UUID bossEntityId = activeByPlayer.get(playerId);
+        if (bossEntityId != null) {
+            ActiveBoss active = activeByEntity.get(bossEntityId);
+            if (active != null) {
+                clearMinionsOf(active);
+            }
+        }
         Player player = plugin.getServer().getPlayer(playerId);
         if (player == null || !player.isOnline()) {
             nightDeathStreaks.remove(playerId);
@@ -293,6 +302,12 @@ final class BossService {
             maxHealth.setBaseValue(definition.health);
             mob.setHealth(definition.health);
         }
+        // 体型放大：GENERIC_SCALE 默认为 1.0（即原尺寸），乘 5 后鹦鹉约 4.5 格高、2.5 格宽，
+        // 满足"世界 Boss 可见性"；不改此常量则 Boss 本体在草丛中几乎不可见。
+        AttributeInstance scale = mob.getAttribute(Attribute.GENERIC_SCALE);
+        if (scale != null) {
+            scale.setBaseValue(scale.getBaseValue() * 5.0);
+        }
         AttributeInstance attack = mob.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE);
         if (attack != null) {
             attack.setBaseValue(attack.getBaseValue() + definition.attack);
@@ -374,6 +389,7 @@ final class BossService {
         try {
             type = EntityType.valueOf(skill.summon().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
+            log.warning(() -> "Boss " + active.definition.id + " 召唤实体类型非法：" + skill.summon());
             return;
         }
         for (int i = 0; i < skill.count(); i++) {
@@ -383,8 +399,26 @@ final class BossService {
                                 ThreadLocalRandom.current().nextDouble(-3.0, 3.0), 0.0,
                                 ThreadLocalRandom.current().nextDouble(-3.0, 3.0)), type);
                 minion.getPersistentDataContainer().set(Keys.MINION, PersistentDataType.BYTE, (byte) 1);
+                // 记录召唤物所属 Boss 实体 UUID，供玩家死亡时按归属清理（此前该标记只写不读）
+                minion.getPersistentDataContainer().set(Keys.MINION_OWNER, PersistentDataType.STRING,
+                        active.entity.getUniqueId().toString());
             } catch (IllegalArgumentException ignored) {
                 return;
+            }
+        }
+    }
+
+    /** 清除指定 Boss 召唤出的全部护卫（恼鬼等）：按 MINION_OWNER 归属键遍历同世界实体。 */
+    private void clearMinionsOf(ActiveBoss active) {
+        String ownerKey = active.entity.getUniqueId().toString();
+        for (Entity entity : active.entity.getWorld().getEntities()) {
+            if (entity.equals(active.entity)) {
+                continue;
+            }
+            String owner = entity.getPersistentDataContainer().get(
+                    Keys.MINION_OWNER, PersistentDataType.STRING);
+            if (ownerKey.equals(owner)) {
+                entity.remove();
             }
         }
     }
