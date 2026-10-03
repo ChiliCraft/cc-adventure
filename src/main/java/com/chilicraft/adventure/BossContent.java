@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 
 /**
@@ -64,7 +65,13 @@ final class BossContent {
         int health = Math.max(20, s.getInt("health", 1000));
         int attack = Math.max(0, s.getInt("attack", 5));
         int param = Math.max(0, s.getInt("trigger-param", 50));
+        // 概率触发型读小数（如 0.1 = 0.1%）；阈值型忽略此值
+        double triggerPercent = Math.max(0.0, s.getDouble("trigger-param", 50.0));
         int firstKillSoul = Math.max(0, s.getInt("first-kill-soul", 100));
+        // capability 键：缺省 null（继承全局），显式 true/false 以本 Boss 为准
+        Boolean capability = s.contains("capability") ? s.getBoolean("capability") : null;
+        // 能力值曲线参数逐 Boss 覆盖：capability-cap 下的键（attack-peak 等）覆盖全局同名键
+        Map<String, Double> capabilityParams = parseCapabilityParams(s.getConfigurationSection("capability-cap"));
 
         List<BossDefinition.Skill> skills = new ArrayList<>();
         ConfigurationSection sk = s.getConfigurationSection("skills");
@@ -93,8 +100,42 @@ final class BossContent {
         return new BossDefinition(id,
                 s.getString("display", id),
                 s.getString("entity", "ZOMBIE"),
-                health, attack, trigger, param, firstKillSoul,
+                health, attack, trigger, param, triggerPercent, firstKillSoul,
                 s.getString("mythic-id", ""),
+                capability,
+                capabilityParams,
                 List.copyOf(skills), true);
+    }
+
+    /**
+     * 解析逐 Boss 的能力值曲线参数覆盖段；只收白名单键（防误配未知键静默生效），
+     * 非法数值告警跳过。键与全局 config.yml boss.capability 同名。
+     */
+    private Map<String, Double> parseCapabilityParams(ConfigurationSection s) {
+        if (s == null) {
+            return Map.of();
+        }
+        Set<String> allowed = Set.of(
+                "attack-peak", "attack-sigma",
+                "defense-max", "defense-toughness-weight", "defense-base",
+                "defeat-peak", "defeat-sigma",
+                "kills-cap", "dungeons-cap", "bosses-cap", "arena-cap",
+                "weight-kills", "weight-dungeons", "weight-bosses", "weight-arena",
+                "age-peak", "age-sigma", "age-max-days",
+                "survival-cap", "reference");
+        Map<String, Double> result = new LinkedHashMap<>();
+        for (String key : s.getKeys(false)) {
+            if (!allowed.contains(key)) {
+                log.warning(() -> "Boss capability-cap 键非法（不在白名单）：" + key + "，忽略");
+                continue;
+            }
+            double v = s.getDouble(key, Double.NaN);
+            if (Double.isNaN(v) || Double.isInfinite(v) || v < 0) {
+                log.warning(() -> "Boss capability-cap." + key + "=" + v + " 非法，忽略");
+                continue;
+            }
+            result.put(key, v);
+        }
+        return result;
     }
 }

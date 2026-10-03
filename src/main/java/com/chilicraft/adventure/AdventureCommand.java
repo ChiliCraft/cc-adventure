@@ -22,14 +22,17 @@ final class AdventureCommand implements CommandExecutor, TabCompleter, ModuleCom
     private final ExpeditionService expeditions;
     private final BossService bosses;
     private final AdventureGui gui;
+    private final AdventureSettings settings;
 
     AdventureCommand(PartyService parties, DungeonService dungeons,
-                     ExpeditionService expeditions, BossService bosses, AdventureGui gui) {
+                     ExpeditionService expeditions, BossService bosses, AdventureGui gui,
+                     AdventureSettings settings) {
         this.parties = parties;
         this.dungeons = dungeons;
         this.expeditions = expeditions;
         this.bosses = bosses;
         this.gui = gui;
+        this.settings = settings;
     }
 
     @Override
@@ -59,6 +62,8 @@ final class AdventureCommand implements CommandExecutor, TabCompleter, ModuleCom
                 if (args.length == 2 && args[1].equalsIgnoreCase("status")) {
                     player.sendMessage("已加载世界 Boss：" + bosses.bossCount()
                             + "；你的活跃 Boss：" + bosses.status(player.getUniqueId()));
+                } else if (args.length == 2 && args[1].equalsIgnoreCase("debug")) {
+                    bossDebug(player);
                 } else {
                     usage(player);
                 }
@@ -145,8 +150,41 @@ final class AdventureCommand implements CommandExecutor, TabCompleter, ModuleCom
                 + "；Boss 定义：" + bosses.bossCount());
     }
 
+    /** 能力值 debug：打印五项分项、乘积倍率与每个概率型 Boss 的有效概率 */
+    private void bossDebug(Player player) {
+        CapabilityService cap = bosses.capability();
+        CapabilityService.Snapshot s = cap.evaluate(player);
+        player.sendMessage("=== 世界 Boss 能力值（capability " + (bosses.capabilityEnabled() ? "开" : "关") + "）===");
+        player.sendMessage(String.format(Locale.ROOT,
+                "攻击 A=%.3f（背包最强 %.2f）| 防御 D=%.3f（%.2f）| 击败 B=%.3f | 年龄 R=%.3f（%d天）| 生存 S=%.3f（%s）",
+                s.attack(), s.rawAttack(), s.defense(), s.rawDefense(),
+                s.defeat(), s.age(), s.accountAgeDays(),
+                s.survival(), s.secondsSinceDeath() < 0 ? "无死亡记录" : s.secondsSinceDeath() + "秒"));
+        player.sendMessage(String.format(Locale.ROOT,
+                "Modifier = A×D×B×R×S = %.4f（参考 %.2f → 折算 %.3f）",
+                s.modifier(), settings.capReference,
+                Math.min(1.0, s.modifier() / settings.capReference)));
+        for (BossDefinition def : bosses.definitions().values()) {
+            if (def.trigger != BossDefinition.TriggerType.RAIN_OCEAN
+                    && def.trigger != BossDefinition.TriggerType.THUNDER
+                    && def.trigger != BossDefinition.TriggerType.RANDOM) {
+                continue;
+            }
+            boolean useCap = def.capabilityEnabled(settings.capEnabled);
+            double effective = useCap
+                    ? cap.effectivePercent(def.triggerPercent, s.modifier(), def)
+                    : def.triggerPercent;
+            player.sendMessage(String.format(Locale.ROOT, "  %-16s 基础 %.3f%% → 有效 %.4f%%%s",
+                    def.id, def.triggerPercent, effective,
+                    useCap ? "" : "（该 Boss 关闭能力值）"));
+        }
+        player.sendMessage("巡检间隔 " + settings.bossCheckSeconds + " 秒（"
+                + settings.bossCheckSeconds * 20L + " ticks）；有效概率 = trigger-param × modifier，无全局硬上限");
+        player.sendMessage("注：modifier 用全局曲线算；各 Boss 若配了 capability-cap 则以其覆盖为准。");
+    }
+
     private void usage(CommandSender sender) {
-        sender.sendMessage("用法：/adventure [menu|party|dungeon|expedition|boss status|status]");
+        sender.sendMessage("用法：/adventure [menu|party|dungeon|expedition|boss status|boss debug|status]");
     }
 
     @Override
@@ -162,7 +200,7 @@ final class AdventureCommand implements CommandExecutor, TabCompleter, ModuleCom
         if (args[0].equalsIgnoreCase("dungeon") && args.length == 2) return filter(List.of("start", "leave", "list"), args[1]);
         if (args[0].equalsIgnoreCase("dungeon") && args.length == 3 && args[1].equalsIgnoreCase("start")) return filter(dungeons.listIds(), args[2]);
         if (args[0].equalsIgnoreCase("expedition") && args.length == 2) return filter(List.of("start", "leave"), args[1]);
-        if (args[0].equalsIgnoreCase("boss") && args.length == 2) return filter(List.of("status"), args[1]);
+        if (args[0].equalsIgnoreCase("boss") && args.length == 2) return filter(List.of("status", "debug"), args[1]);
         if (args.length == 3 && args[0].equalsIgnoreCase("party")) {
             List<String> names = new ArrayList<>();
             for (Player p : sender.getServer().getOnlinePlayers()) names.add(p.getName());

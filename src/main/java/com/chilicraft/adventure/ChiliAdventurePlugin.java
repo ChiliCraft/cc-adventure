@@ -51,9 +51,10 @@ public final class ChiliAdventurePlugin extends JavaPlugin {
         parties = partyService;
         DungeonContent dungeonContent = new DungeonContent(getDataFolder(), getLogger());
         BossContent bossContent = new BossContent(getDataFolder(), getLogger());
+        CapabilityService capability = new CapabilityService(api, settings);
         dungeons = new DungeonService(this, settings, api, parties, dungeonContent, getLogger());
         expeditions = new ExpeditionService(this, settings, api, parties, getLogger());
-        bosses = new BossService(this, settings, api, bossContent, getLogger());
+        bosses = new BossService(this, settings, api, bossContent, capability, getLogger());
         dungeons.reloadContent();
         bosses.reloadContent();
 
@@ -66,7 +67,7 @@ public final class ChiliAdventurePlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        commandHandler = new AdventureCommand(parties, dungeons, expeditions, bosses, gui);
+        commandHandler = new AdventureCommand(parties, dungeons, expeditions, bosses, gui, settings);
         command.setExecutor(commandHandler);
         command.setTabCompleter(commandHandler);
         try {
@@ -120,7 +121,10 @@ public final class ChiliAdventurePlugin extends JavaPlugin {
         reloadConfig();
         if (settings != null) settings.refresh();
         if (dungeons != null) dungeons.reloadContent();
-        if (bosses != null) bosses.reloadContent();
+        if (bosses != null) {
+            bosses.reloadContent();
+            bosses.capability().invalidateAll();   // 配置可能改了能力值参数，强制重新拉库
+        }
     }
 
     private void saveContentFile(String name) {

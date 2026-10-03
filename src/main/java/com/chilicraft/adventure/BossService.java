@@ -44,6 +44,7 @@ final class BossService {
     private final AdventureSettings settings;
     private final ChiliCraftAPI api;
     private final BossContent content;
+    private final CapabilityService capability;
     private final Logger log;
     private final Map<UUID, ActiveBoss> activeByEntity = new HashMap<>();
     private final Map<UUID, UUID> activeByPlayer = new HashMap<>();
@@ -53,11 +54,12 @@ final class BossService {
     private long elapsedSeconds;
 
     BossService(JavaPlugin plugin, AdventureSettings settings, ChiliCraftAPI api,
-                BossContent content, Logger log) {
+                BossContent content, CapabilityService capability, Logger log) {
         this.plugin = plugin;
         this.settings = settings;
         this.api = api;
         this.content = content;
+        this.capability = capability;
         this.log = log;
     }
 
@@ -173,6 +175,7 @@ final class BossService {
 
     void handleQuit(UUID playerId) {
         nightDeathStreaks.remove(playerId);
+        capability.invalidate(playerId);
         UUID entityId = activeByPlayer.remove(playerId);
         if (entityId != null) {
             removeActive(entityId, true);
@@ -190,6 +193,7 @@ final class BossService {
         activeByPlayer.clear();
         nightDeathStreaks.clear();
         pendingFirstKills.clear();
+        capability.invalidateAll();
         registry = Map.of();
     }
 
@@ -213,6 +217,16 @@ final class BossService {
         return nightDeathStreaks.getOrDefault(playerId, 0);
     }
 
+    /** 能力值服务（debug 命令展示分项；与巡检同源） */
+    CapabilityService capability() {
+        return capability;
+    }
+
+    /** 全局能力值开关（debug 命令展示） */
+    boolean capabilityEnabled() {
+        return settings.capEnabled;
+    }
+
     private void inspectPlayers() {
         for (Player player : plugin.getServer().getOnlinePlayers()) {
             try {
@@ -220,8 +234,11 @@ final class BossService {
                     continue;
                 }
                 for (BossDefinition definition : registry.values()) {
-                    if (definition.trigger != BossDefinition.TriggerType.NIGHT_DEATH_STREAK
-                            && matches(player, definition) && spawnFor(player, definition)) {
+                    if (definition.trigger == BossDefinition.TriggerType.NIGHT_DEATH_STREAK) {
+                        continue;
+                    }
+                    // 每个概率 Boss 各自算一次快照（曲线参数不同），背包扫描成本已由 60s 缓存兜底
+                    if (matches(player, definition) && spawnFor(player, definition)) {
                         break;
                     }
                 }
@@ -236,16 +253,29 @@ final class BossService {
         return switch (definition.trigger) {
             case RAIN_OCEAN -> world.hasStorm() && !world.isThundering()
                     && player.getLocation().getBlock().getBiome().getKey().getKey().contains("deep_ocean")
-                    && chance(definition.param);
-            case THUNDER -> world.isThundering() && chance(definition.param);
-            case RANDOM -> chance(definition.param);
+                    && chance(definition, player);
+            case THUNDER -> world.isThundering() && chance(definition, player);
+            case RANDOM -> chance(definition, player);
             case DEPTH -> player.getLocation().getY() < definition.param;
             case NIGHT_DEATH_STREAK -> false;
         };
     }
 
-    private boolean chance(int percent) {
-        return percent >= 100 || percent > 0 && ThreadLocalRandom.current().nextInt(100) < percent;
+    /**
+     * 概率触发型判定：有效概率 = trigger-param(%) × 能力倍率（向下拉，不放大）。
+     * capability 按 Boss 级开关（BossDefinition.capabilityEnabled）决定是否套用能力值；
+     * 曲线参数用该 Boss 的 capability-cap 覆盖（缺省回退全局）。
+     * 无全局硬上限，各 Boss 的 trigger-param 即其天花板。
+     */
+    private boolean chance(BossDefinition definition, Player player) {
+        double effective = capability.effectivePercent(definition, player);
+        if (effective <= 0.0) {
+            return false;
+        }
+        if (effective >= 100.0) {
+            return true;
+        }
+        return ThreadLocalRandom.current().nextDouble(100.0) < effective;
     }
 
     private boolean spawnFor(Player player, BossDefinition definition) {

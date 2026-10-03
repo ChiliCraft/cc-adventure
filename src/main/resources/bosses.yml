@@ -17,6 +17,18 @@
 #
 # mythic-id 非空且 MM 在场时改由 MM 生成（技能交 MM 配置接管）；
 # MM 缺失或生成失败自动降级原版实体路径。
+#
+# 能力值（capability）：概率触发型 Boss（RAIN_OCEAN / THUNDER / RANDOM）
+#   的有效概率 = trigger-param(%) × modifier（modifier ∈ [0,1]，见 config.yml）。
+#   capability: true|false   —— 逐 Boss 开关；缺省继承全局 boss.capability.enabled
+#   capability-cap: { ... }  —— 逐 Boss 覆盖曲线参数（键同 config.yml boss.capability，
+#                               白名单校验，非法键告警跳过；仅覆盖曲线形状，
+#                               不覆盖开关与全局折算 reference/weights）
+#   示例（只让"玩得久、装备好"的老玩家遇到本 Boss）：
+#     capability-cap:
+#       attack-peak: 12
+#       defeat-peak: 0.7
+#       age-peak: 0.6
 # ============================================================
 
 bosses:
@@ -96,7 +108,7 @@ bosses:
     health: 350
     attack: 6
     trigger: RANDOM
-    trigger-param: 5          # 每次巡检 5%
+    trigger-param: 0.5        # 每次巡检 0.5%（capability 乘算后 ≤ 0.5%；铁套3h≈1次/60min）
     first-kill-soul: 200
     mythic-id: ""
     skills:
