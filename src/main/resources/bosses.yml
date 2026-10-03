@@ -93,7 +93,7 @@ bosses:
   mirror_parrot:
     display: 幻形鹦鹉
     entity: PARROT
-    health: 2000
+    health: 350
     attack: 6
     trigger: RANDOM
     trigger-param: 5          # 每次巡检 5%

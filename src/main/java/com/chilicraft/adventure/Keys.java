@@ -16,6 +16,8 @@ final class Keys {
     static NamespacedKey BOSS_ID;
     /** Boss 召唤物标记（护卫） */
     static NamespacedKey MINION;
+    /** Boss 召唤物所属的 Boss 实体 UUID（死亡时按此清理） */
+    static NamespacedKey MINION_OWNER;
     /** 远征层内房间怪标记 */
     static NamespacedKey EXPEDITION_ID;
 
@@ -26,6 +28,7 @@ final class Keys {
         DUNGEON_ID = new NamespacedKey(plugin, "dungeon_id");
         BOSS_ID = new NamespacedKey(plugin, "boss_id");
         MINION = new NamespacedKey(plugin, "minion");
+        MINION_OWNER = new NamespacedKey(plugin, "minion_owner");
         EXPEDITION_ID = new NamespacedKey(plugin, "expedition_id");
     }
 }
